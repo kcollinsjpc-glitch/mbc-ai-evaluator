@@ -49,13 +49,18 @@ ETHICAL (18 points total, each 0 to 2):
 
 EFFECTIVENESS (0 to 5): Overall quality, efficiency, and usefulness for education
 
-SUITABILITY (choose one):
-- "staff-only" for 18+ only tools
-- "senior" for staff and Year 10 to 12
-- "middle-senior" for staff and Year 7 to 12
-- "supervised" for staff and all students with supervision
-- "all" for universally appropriate tools
-- "not-recommended" if the tool should not be used
+SUITABILITY (array of one or more values, like tags):
+Choose all groups for whom the tool is suitable.
+- "staff" for staff
+- "senior" for Senior Secondary Students (Year 10 to 12)
+- "junior" for Junior Secondary Students (Year 7 to 9)
+- "primary" for Primary Students (Year 5 to 6, supervised)
+- "all" for universally appropriate tools (do NOT combine with other values)
+- "not-recommended" if the tool should not be used (do NOT combine with other values)
+
+If the tool is suitable for staff and senior students only, return ["staff", "senior"].
+If suitable across staff and all secondary students, return ["staff", "senior", "junior"].
+"all" and "not-recommended" must each appear alone in the array.
 
 TAGS (array of multiple relevant values): Choose from "Text Generation", "Image Generation", "Video Generation", "Audio and Music", "Research and Search", "Writing Assistance", "Presentation", "Diagram and Visualisation", "Coding", "Lesson Planning", "Differentiation", "Assessment and Feedback", "Staff focused", "Student focused", "Other". Include ALL that apply. Most tools will have 2 to 4 tags.
 
@@ -72,7 +77,7 @@ Return ONLY valid JSON with no preamble, no markdown code fences, no explanation
   "name": "Tool Name",
   "purpose": "1 to 2 sentence description of what it does",
   "tags": ["Text Generation", "Staff focused"],
-  "suitability": "one of the suitability values above",
+  "suitability": ["staff", "senior"],
   "ageRestriction": "e.g. 13+, 18+, or empty string",
   "safety": {
     "dataSovereignty": 0,
