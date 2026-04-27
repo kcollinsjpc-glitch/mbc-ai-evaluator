@@ -1,5 +1,8 @@
 // Vercel serverless function. Runs on Vercel's servers, not in the user's browser.
 // Holds the secret ANTHROPIC_API_KEY and proxies requests to Claude.
+// Requires admin auth so visitors can't rack up the API bill.
+
+import { requireAuth } from './_auth.js';
 
 const EVALUATION_SYSTEM_PROMPT = `You are evaluating an AI tool for Moreton Bay College (MBC), a P-12 girls' school in Brisbane, Queensland, Australia.
 
@@ -107,6 +110,8 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  if (!(await requireAuth(req, res))) return;
 
   const { url } = req.body || {};
   if (!url || typeof url !== 'string') {
