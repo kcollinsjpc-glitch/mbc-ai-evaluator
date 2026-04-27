@@ -124,12 +124,12 @@ function getTagColor(tag) {
 }
 
 const SUITABILITY_OPTIONS = [
-  { value: 'staff', label: 'Staff', short: 'Staff', icon: '🔒' },
-  { value: 'senior', label: 'Senior Secondary Students (Year 10 to 12)', short: 'Year 10 to 12', icon: '👥' },
-  { value: 'junior', label: 'Junior Secondary Students (Year 7 to 9)', short: 'Year 7 to 9', icon: '👨‍🎓' },
-  { value: 'primary', label: 'Primary Students (Year 5 to 6, supervised)', short: 'Primary (supervised)', icon: '👩‍🏫' },
-  { value: 'all', label: 'All users, any context', short: 'All users', icon: '🌐' },
-  { value: 'not-recommended', label: 'Not recommended for any users', short: 'Not recommended', icon: '⛔' }
+  { value: 'staff', label: 'Staff', short: 'Staff' },
+  { value: 'senior', label: 'Senior Secondary Students (Year 10 to 12)', short: 'Year 10 to 12' },
+  { value: 'junior', label: 'Junior Secondary Students (Year 7 to 9)', short: 'Year 7 to 9' },
+  { value: 'primary', label: 'Primary Students (Year 5 to 6, supervised)', short: 'Primary (supervised)' },
+  { value: 'all', label: 'All users, any context', short: 'All users' },
+  { value: 'not-recommended', label: 'Not recommended for any users', short: 'Not recommended' }
 ];
 
 const SUITABILITY_COLORS = {
@@ -971,10 +971,10 @@ function Dashboard({ tools, allTools, classCounts, searchQuery, setSearchQuery, 
                 ariaLabel="Sort by status"
               />
             </div>
-            <div className="col-span-4">Description</div>
+            <div className="col-span-2">Description</div>
             <div className="col-span-2">Audience</div>
             <div className="col-span-2">Tool Type</div>
-            <div className="col-span-1">Cautions</div>
+            <div className="col-span-3">Cautions</div>
           </div>
           <div className="space-y-3">
             {paginated.map((tool, idx) => (
@@ -1044,8 +1044,8 @@ function SuitabilityBadge({ value }) {
   const color = SUITABILITY_COLORS[value] || { bg: '#F3F4F6', text: '#374151' };
   if (!opt) return null;
   return (
-    <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap w-fit" style={{ background: color.bg, color: color.text }}>
-      <span>{opt.icon}</span><span>{opt.short}</span>
+    <span className="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap w-fit" style={{ background: color.bg, color: color.text }}>
+      {opt.short}
     </span>
   );
 }
@@ -1087,7 +1087,7 @@ function ToolRow({ tool, onView, onEdit, isUnlocked }) {
         <div className="col-span-1">
           <span className="inline-block text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: cls.bg, color: cls.text }}>{cls.label}</span>
         </div>
-        <div className="col-span-4">
+        <div className="col-span-2">
           <p className="text-sm text-gray-700 line-clamp-3">{tool.purpose || <span className="text-gray-300">No description</span>}</p>
         </div>
         <div className="col-span-2"><SuitabilityBadges values={getSuitability(tool)} /></div>
@@ -1097,7 +1097,7 @@ function ToolRow({ tool, onView, onEdit, isUnlocked }) {
             {tags.length > 4 && <span className="text-xs text-gray-400">+{tags.length - 4}</span>}
           </div>
         </div>
-        <div className="col-span-1">
+        <div className="col-span-3">
           <div className="text-xs text-gray-600 line-clamp-3">
             {tool.notes ? renderMultiline(tool.notes) : <span className="text-gray-300">None</span>}
           </div>
@@ -1358,7 +1358,6 @@ function EvaluationForm({ tool, setTool, onSave, onCancel, isEditing }) {
                 return (
                   <label key={opt.value} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition ${isChecked ? 'border-pink-400 bg-pink-50' : 'border-gray-200 hover:border-gray-300'}`}>
                     <input type="checkbox" checked={isChecked} onChange={toggle} className="rounded text-pink-600" />
-                    <span className="text-lg">{opt.icon}</span>
                     <span className="text-sm text-gray-700">{opt.label}</span>
                   </label>
                 );
