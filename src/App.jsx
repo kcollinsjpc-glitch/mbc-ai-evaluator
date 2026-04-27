@@ -1,31 +1,36 @@
 import React, { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
 import { Shield, CheckCircle2, AlertTriangle, XCircle, Plus, Trash2, Edit3, ArrowLeft, ExternalLink, Search, BarChart3, Star, Users, Calendar, FileText, Award, Sparkles, Loader2, AlertCircle, Info, Lock, Unlock, KeyRound, Eye, X, ChevronRight, ChevronLeft, ChevronDown, ChevronUp } from 'lucide-react';
 
 const ADMIN_PASSWORD = 'elearningaitool123';
 const ITEMS_PER_PAGE = 10;
 const HEADING_PINK = '#D14680';
-const STORAGE_PREFIX = 'mbc-tool:';
 
-// localStorage helpers replace the window.storage API used by Claude artifacts
+// Supabase configuration
+const SUPABASE_URL = 'https://pjdqwpmbbufuzirgdauh.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_Vt0b0Uwp-KEwmmW3lGARXw_x4mgsJ2w';
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Storage layer using Supabase so all staff see the same library of tools
 const storage = {
-  async list(prefix) {
-    const keys = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith(prefix)) keys.push(key);
-    }
-    return { keys };
+  async list() {
+    const { data, error } = await supabase
+      .from('tools')
+      .select('*')
+      .order('updated_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
   },
-  async get(key) {
-    const value = localStorage.getItem(key);
-    return value ? { value } : null;
-  },
-  async set(key, value) {
-    localStorage.setItem(key, value);
+  async upsert(id, toolData, updatedAt) {
+    const { error } = await supabase
+      .from('tools')
+      .upsert({ id, data: toolData, updated_at: updatedAt });
+    if (error) throw error;
     return true;
   },
-  async delete(key) {
-    localStorage.removeItem(key);
+  async delete(id) {
+    const { error } = await supabase.from('tools').delete().eq('id', id);
+    if (error) throw error;
     return true;
   }
 };
@@ -303,6 +308,7 @@ export default function App() {
   const [filterAudience, setFilterAudience] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [authStatus, setAuthStatus] = useState('locked');
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
@@ -336,32 +342,36 @@ export default function App() {
   }
 
   async function loadTools() {
+    setLoadError(null);
     try {
-      const result = await storage.list(STORAGE_PREFIX);
-      if (result && result.keys) {
-        const loaded = [];
-        for (const key of result.keys) {
-          try {
-            const t = await storage.get(key);
-            if (t) loaded.push({ ...JSON.parse(t.value), _key: key });
-          } catch (e) {}
-        }
-        setTools(loaded.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)));
-      }
-    } catch (e) {}
+      const rows = await storage.list();
+      const loaded = rows.map(row => ({
+        ...row.data,
+        _key: row.id,
+        updatedAt: row.updated_at
+      }));
+      setTools(loaded);
+    } catch (e) {
+      console.error('Load failed', e);
+      setLoadError('Could not connect to the database. Please try refreshing the page.');
+    }
     setLoading(false);
   }
 
   async function saveTool(tool) {
-    const id = editingId || `${STORAGE_PREFIX}${Date.now()}`;
-    const toSave = { ...tool, updatedAt: Date.now(), id };
+    const id = editingId || `tool-${Date.now()}`;
+    const updatedAt = Date.now();
+    const { _key, updatedAt: _, ...toolData } = tool;
     try {
-      await storage.set(id, JSON.stringify(toSave));
+      await storage.upsert(id, toolData, updatedAt);
       await loadTools();
       setView('dashboard');
       setCurrentTool(null);
       setEditingId(null);
-    } catch (e) { console.error('Save failed', e); }
+    } catch (e) {
+      console.error('Save failed', e);
+      alert('Could not save evaluation. Please check your connection and try again.');
+    }
   }
 
   function requestDelete(tool) { setDeleteTarget(tool); }
@@ -378,6 +388,7 @@ export default function App() {
     } catch (e) {
       console.error('Delete failed', e);
       setDeleteTarget(null);
+      alert('Could not delete evaluation. Please try again.');
     }
   }
 
@@ -443,7 +454,18 @@ export default function App() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {loading ? (
-          <div className="text-center py-20 text-gray-500">Loading...</div>
+          <div className="text-center py-20 text-gray-500 flex items-center justify-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin" /> Loading evaluations...
+          </div>
+        ) : loadError ? (
+          <div className="bg-white rounded-xl shadow-sm border border-red-200 p-8 text-center max-w-2xl mx-auto">
+            <AlertCircle className="w-10 h-10 mx-auto mb-3 text-red-500" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Connection error</h3>
+            <p className="text-sm text-gray-600 mb-4">{loadError}</p>
+            <button onClick={loadTools} className="px-4 py-2 rounded-lg text-white text-sm font-medium hover:opacity-90 transition" style={{ background: '#A6174A' }}>
+              Try again
+            </button>
+          </div>
         ) : view === 'dashboard' ? (
           <Dashboard
             tools={filteredTools}
