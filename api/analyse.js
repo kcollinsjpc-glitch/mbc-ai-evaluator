@@ -126,13 +126,13 @@ export default async function handler(req, res) {
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 4000,
         system: EVALUATION_SYSTEM_PROMPT,
         messages: [
           { role: 'user', content: `Research and evaluate this AI tool using web search, then return the concise JSON evaluation: ${url}` }
         ],
-        tools: [{ type: 'web_search_20250305', name: 'web_search' }]
+        tools: [{ type: 'web_search_20260209', name: 'web_search' }]
       })
     });
 
