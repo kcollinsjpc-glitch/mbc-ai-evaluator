@@ -976,6 +976,24 @@ function Dashboard({ tools, allTools, classCounts, searchQuery, setSearchQuery, 
             <div className="col-span-2">Tool Type</div>
             <div className="col-span-3">Cautions</div>
           </div>
+
+          <div className="lg:hidden mb-3 flex items-center gap-2">
+            <label htmlFor="mobile-sort" className="text-xs font-semibold uppercase tracking-wide text-gray-500 flex-shrink-0">Sort by</label>
+            <select
+              id="mobile-sort"
+              value={sortBy}
+              onChange={e => setSortBy(e.target.value)}
+              className="flex-1 px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:border-pink-400 text-sm bg-white"
+            >
+              <option value="date-newest">Date Added (Newest First)</option>
+              <option value="date-oldest">Date Added (Oldest First)</option>
+              <option value="name-az">Alphabetically (A to Z)</option>
+              <option value="name-za">Alphabetically (Z to A)</option>
+              <option value="status-best">Status (Preferred to Restricted)</option>
+              <option value="status-worst">Status (Restricted to Preferred)</option>
+            </select>
+          </div>
+
           <div className="space-y-3">
             {paginated.map((tool, idx) => (
               <ToolRow key={tool._key || tool.id} tool={tool} index={idx} onView={() => onView(tool)} onEdit={() => onEdit(tool)} isUnlocked={isUnlocked} />
