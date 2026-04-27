@@ -35,6 +35,27 @@ const storage = {
   }
 };
 
+// Calls our Vercel serverless function which holds the secret Anthropic API key.
+// The frontend never sees the key.
+async function analyzeToolWithAI(url) {
+  const response = await fetch('/api/analyse', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url })
+  });
+
+  if (!response.ok) {
+    let errorMsg = `Server returned ${response.status}`;
+    try {
+      const errorData = await response.json();
+      if (errorData.error) errorMsg = errorData.error;
+    } catch (e) {}
+    throw new Error(errorMsg);
+  }
+
+  return await response.json();
+}
+
 const CLASSIFICATIONS = {
   prohibited: { label: 'Prohibited', color: '#1F1F1F', bg: '#1F1F1F', text: '#FFFFFF', desc: 'Under no circumstances should this tool be used in any school context.' },
   restricted: { label: 'Restricted', color: '#DC2626', bg: '#FEE2E2', text: '#991B1B', desc: 'For staff use only. Meets basic standards but has safety or ethical limitations that make it inappropriate for students.' },
@@ -1005,6 +1026,98 @@ function TagSelector({ selected, onChange }) {
   );
 }
 
+function AIAnalysisPanel({ tool, setTool }) {
+  const [urlInput, setUrlInput] = useState(tool.url || '');
+  const [isAnalysing, setIsAnalysing] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function handleAnalyse() {
+    if (!urlInput.trim()) {
+      setError('Please enter a URL to analyse.');
+      return;
+    }
+    setError(null);
+    setIsAnalysing(true);
+    try {
+      const result = await analyzeToolWithAI(urlInput.trim());
+      setTool(prev => ({
+        ...prev,
+        ...result,
+        tags: result.tags || [],
+        url: urlInput.trim(),
+        aiAnalysed: true,
+        reviewerOverride: prev.reviewerOverride || 'none'
+      }));
+    } catch (e) {
+      setError(e.message || 'Something went wrong. Please try again or fill out the form manually.');
+    } finally {
+      setIsAnalysing(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl overflow-hidden shadow-sm" style={{ background: 'linear-gradient(135deg, #A6174A 0%, #7A0E33 100%)' }}>
+      <div className="p-5 text-white">
+        <div className="flex items-center gap-2 mb-2">
+          <Sparkles className="w-5 h-5" style={{ color: '#D4A853' }} />
+          <h2 className="font-semibold text-lg">Analyse with AI</h2>
+        </div>
+        <p className="text-sm text-white text-opacity-90 mb-3">
+          Paste a URL. AI will research the tool and pre-fill scores for your review.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <input
+            type="url"
+            value={urlInput}
+            onChange={e => setUrlInput(e.target.value)}
+            placeholder="https://example.com"
+            disabled={isAnalysing}
+            className="flex-1 px-4 py-2.5 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-yellow-300 disabled:opacity-60"
+            onKeyDown={e => e.key === 'Enter' && !isAnalysing && handleAnalyse()}
+          />
+          <button
+            onClick={handleAnalyse}
+            disabled={isAnalysing || !urlInput.trim()}
+            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg font-semibold text-sm transition disabled:opacity-60 disabled:cursor-not-allowed"
+            style={{ background: '#D4A853', color: '#7A0E33' }}
+          >
+            {isAnalysing ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Researching...
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4" />
+                Analyse
+              </>
+            )}
+          </button>
+        </div>
+        {error && (
+          <div className="mt-3 flex items-start gap-2 p-3 rounded-lg text-sm" style={{ background: 'rgba(255,255,255,0.15)' }}>
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <div>{error}</div>
+          </div>
+        )}
+        {isAnalysing && (
+          <div className="mt-2 text-xs text-white text-opacity-80">
+            Usually takes around a minute.
+          </div>
+        )}
+      </div>
+      {tool.aiAnalysed && tool.aiReasoning && (
+        <div className="bg-white bg-opacity-10 border-t border-white border-opacity-20 p-5">
+          <AIReasoningDisplay reasoning={tool.aiReasoning} theme="dark" />
+          <div className="text-xs mt-3 pt-2 border-t border-white border-opacity-20 text-white text-opacity-70 italic">
+            Review and adjust scores below as needed.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EvaluationForm({ tool, setTool, onSave, onCancel, isEditing }) {
   const safetyScore = calculateSafetyScore(tool.safety);
   const ethicalScore = calculateEthicalScore(tool.ethical);
@@ -1021,6 +1134,8 @@ function EvaluationForm({ tool, setTool, onSave, onCancel, isEditing }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-2 space-y-6">
+        {!isEditing && <AIAnalysisPanel tool={tool} setTool={setTool} />}
+
         <FormSection title="Tool Information" icon={<FileText className="w-4 h-4" />}>
           <Field label="Tool Name" required>
             <input type="text" value={tool.name} onChange={e => updateField('name', e.target.value)} placeholder="e.g., ChatGPT, Claude, Gamma" className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:border-pink-400 text-sm" />
