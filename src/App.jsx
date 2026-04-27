@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { Shield, CheckCircle2, AlertTriangle, XCircle, Plus, Trash2, Edit3, ArrowLeft, ExternalLink, Search, BarChart3, Star, Users, Calendar, FileText, Award, Sparkles, Loader2, AlertCircle, Info, Lock, Unlock, KeyRound, Eye, X, ChevronRight, ChevronLeft, ChevronDown, ChevronUp } from 'lucide-react';
+import { Shield, CheckCircle2, AlertTriangle, XCircle, Plus, Trash2, Edit3, ArrowLeft, ArrowUpDown, ExternalLink, Search, BarChart3, Star, Users, Calendar, FileText, Award, Sparkles, Loader2, AlertCircle, Info, Lock, Unlock, KeyRound, Eye, X, ChevronRight, ChevronLeft, ChevronDown, ChevronUp } from 'lucide-react';
 
 const ITEMS_PER_PAGE = 10;
 const HEADING_PINK = '#D14680';
@@ -805,12 +805,82 @@ function ClassificationsExplainer() {
   );
 }
 
+function SortMenu({ current, onChange, options, ariaLabel }) {
+  const [open, setOpen] = useState(false);
+  const ref = React.useRef(null);
+  const isActive = options.some(o => o.value === current);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClickOutside(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  function pick(value) {
+    onChange(value);
+    setOpen(false);
+  }
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-label={ariaLabel}
+        className="p-0.5 rounded hover:bg-gray-200 transition"
+        style={{ color: isActive ? HEADING_PINK : '#9CA3AF' }}
+      >
+        <ArrowUpDown className="w-3 h-3" />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1 z-20 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[14rem]">
+          {options.map(o => (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => pick(o.value)}
+              className={`w-full text-left px-3 py-1.5 text-xs normal-case font-normal tracking-normal transition ${current === o.value ? 'bg-pink-50 text-pink-700 font-medium' : 'text-gray-700 hover:bg-gray-50'}`}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Dashboard({ tools, allTools, classCounts, searchQuery, setSearchQuery, filterClass, setFilterClass, filterTag, setFilterTag, filterAudience, setFilterAudience, hasAnyFilter, clearFilters, currentPage, setCurrentPage, onNew, onView, onEdit, isUnlocked, onLoginClick }) {
   const [showFilters, setShowFilters] = useState(false);
-  const totalPages = Math.max(1, Math.ceil(tools.length / ITEMS_PER_PAGE));
+  const [sortBy, setSortBy] = useState('date-newest');
+
+  const CLASS_RANK = { preferred: 5, approved: 4, limited: 3, restricted: 2, prohibited: 1 };
+  const sortedTools = [...tools].sort((a, b) => {
+    switch (sortBy) {
+      case 'name-az':
+        return (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' });
+      case 'name-za':
+        return (b.name || '').localeCompare(a.name || '', undefined, { sensitivity: 'base' });
+      case 'date-newest':
+        return (b.updatedAt || 0) - (a.updatedAt || 0);
+      case 'date-oldest':
+        return (a.updatedAt || 0) - (b.updatedAt || 0);
+      case 'status-best':
+        return (CLASS_RANK[getClassification(b)] || 0) - (CLASS_RANK[getClassification(a)] || 0);
+      case 'status-worst':
+        return (CLASS_RANK[getClassification(a)] || 0) - (CLASS_RANK[getClassification(b)] || 0);
+      default:
+        return 0;
+    }
+  });
+
+  const totalPages = Math.max(1, Math.ceil(sortedTools.length / ITEMS_PER_PAGE));
   const safePage = Math.min(currentPage, totalPages);
   const start = (safePage - 1) * ITEMS_PER_PAGE;
-  const paginated = tools.slice(start, start + ITEMS_PER_PAGE);
+  const paginated = sortedTools.slice(start, start + ITEMS_PER_PAGE);
   const activeFilterCount = (filterClass !== 'all' ? 1 : 0) + (filterTag !== 'all' ? 1 : 0) + (filterAudience !== 'all' ? 1 : 0);
 
   return (
@@ -875,12 +945,36 @@ function Dashboard({ tools, allTools, classCounts, searchQuery, setSearchQuery, 
       ) : (
         <div>
           <div className="hidden lg:grid grid-cols-12 gap-4 px-5 py-3 mb-3 text-xs font-semibold text-gray-500 uppercase tracking-wide rounded-lg border border-gray-200" style={{ background: '#FAF7F5' }}>
-            <div className="col-span-2">Tool</div>
-            <div className="col-span-2">Status</div>
-            <div className="col-span-2">Description</div>
+            <div className="col-span-2 flex items-center gap-1">
+              <span>Tool</span>
+              <SortMenu
+                current={sortBy}
+                onChange={setSortBy}
+                options={[
+                  { value: 'name-az', label: 'Alphabetically (A to Z)' },
+                  { value: 'name-za', label: 'Alphabetically (Z to A)' },
+                  { value: 'date-newest', label: 'Date Added (Newest First)' },
+                  { value: 'date-oldest', label: 'Date Added (Oldest First)' }
+                ]}
+                ariaLabel="Sort by tool"
+              />
+            </div>
+            <div className="col-span-1 flex items-center gap-1">
+              <span>Status</span>
+              <SortMenu
+                current={sortBy}
+                onChange={setSortBy}
+                options={[
+                  { value: 'status-best', label: 'Status (Preferred to Restricted)' },
+                  { value: 'status-worst', label: 'Status (Restricted to Preferred)' }
+                ]}
+                ariaLabel="Sort by status"
+              />
+            </div>
+            <div className="col-span-4">Description</div>
             <div className="col-span-2">Audience</div>
             <div className="col-span-2">Tool Type</div>
-            <div className="col-span-2">Cautions</div>
+            <div className="col-span-1">Cautions</div>
           </div>
           <div className="space-y-3">
             {paginated.map((tool, idx) => (
@@ -990,10 +1084,10 @@ function ToolRow({ tool, onView, onEdit, isUnlocked }) {
             </button>
           )}
         </div>
-        <div className="col-span-2">
+        <div className="col-span-1">
           <span className="inline-block text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: cls.bg, color: cls.text }}>{cls.label}</span>
         </div>
-        <div className="col-span-2">
+        <div className="col-span-4">
           <p className="text-sm text-gray-700 line-clamp-3">{tool.purpose || <span className="text-gray-300">No description</span>}</p>
         </div>
         <div className="col-span-2"><SuitabilityBadges values={getSuitability(tool)} /></div>
@@ -1003,7 +1097,7 @@ function ToolRow({ tool, onView, onEdit, isUnlocked }) {
             {tags.length > 4 && <span className="text-xs text-gray-400">+{tags.length - 4}</span>}
           </div>
         </div>
-        <div className="col-span-2">
+        <div className="col-span-1">
           <div className="text-xs text-gray-600 line-clamp-3">
             {tool.notes ? renderMultiline(tool.notes) : <span className="text-gray-300">None</span>}
           </div>
