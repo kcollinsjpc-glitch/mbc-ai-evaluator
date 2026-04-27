@@ -2,16 +2,63 @@ import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { Shield, CheckCircle2, AlertTriangle, XCircle, Plus, Trash2, Edit3, ArrowLeft, ExternalLink, Search, BarChart3, Star, Users, Calendar, FileText, Award, Sparkles, Loader2, AlertCircle, Info, Lock, Unlock, KeyRound, Eye, X, ChevronRight, ChevronLeft, ChevronDown, ChevronUp } from 'lucide-react';
 
-const ADMIN_PASSWORD = 'elearningaitool123';
 const ITEMS_PER_PAGE = 10;
 const HEADING_PINK = '#D14680';
+const SESSION_KEY = 'mbc-admin-session';
 
-// Supabase configuration
+// Public Supabase client used for read-only access. Writes go through serverless functions.
 const SUPABASE_URL = 'https://pjdqwpmbbufuzirgdauh.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_Vt0b0Uwp-KEwmmW3lGARXw_x4mgsJ2w';
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Storage layer using Supabase so all staff see the same library of tools
+// Session token helpers. Token lives in localStorage with an expiry timestamp.
+const session = {
+  get() {
+    try {
+      const raw = localStorage.getItem(SESSION_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed.token || !parsed.expiresAt) return null;
+      if (Date.now() >= parsed.expiresAt) {
+        localStorage.removeItem(SESSION_KEY);
+        return null;
+      }
+      return parsed.token;
+    } catch (e) {
+      return null;
+    }
+  },
+  set(token, expiresInSeconds) {
+    const expiresAt = Date.now() + expiresInSeconds * 1000;
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ token, expiresAt }));
+  },
+  clear() {
+    localStorage.removeItem(SESSION_KEY);
+  }
+};
+
+// Calls a protected backend endpoint. Adds the session token automatically.
+async function callApi(path, body) {
+  const token = session.get();
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const response = await fetch(path, { method: 'POST', headers, body: JSON.stringify(body) });
+  if (response.status === 401) {
+    session.clear();
+    throw new Error('Your session has expired. Please log in again.');
+  }
+  if (!response.ok) {
+    let errorMsg = `Server returned ${response.status}`;
+    try {
+      const errorData = await response.json();
+      if (errorData.error) errorMsg = errorData.error;
+    } catch (e) {}
+    throw new Error(errorMsg);
+  }
+  return await response.json();
+}
+
+// Reads remain anonymous (publishable key). Writes go via serverless functions.
 const storage = {
   async list() {
     const { data, error } = await supabase
@@ -22,38 +69,21 @@ const storage = {
     return data || [];
   },
   async upsert(id, toolData, updatedAt) {
-    const { error } = await supabase
-      .from('tools')
-      .upsert({ id, data: toolData, updated_at: updatedAt });
-    if (error) throw error;
-    return true;
+    return await callApi('/api/save-tool', { id, data: toolData, updatedAt });
   },
   async delete(id) {
-    const { error } = await supabase.from('tools').delete().eq('id', id);
-    if (error) throw error;
-    return true;
+    return await callApi('/api/delete-tool', { id });
   }
 };
 
-// Calls our Vercel serverless function which holds the secret Anthropic API key.
-// The frontend never sees the key.
+async function loginWithPassword(password) {
+  const result = await callApi('/api/login', { password });
+  session.set(result.token, result.expiresInSeconds);
+  return result;
+}
+
 async function analyzeToolWithAI(url) {
-  const response = await fetch('/api/analyse', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url })
-  });
-
-  if (!response.ok) {
-    let errorMsg = `Server returned ${response.status}`;
-    try {
-      const errorData = await response.json();
-      if (errorData.error) errorMsg = errorData.error;
-    } catch (e) {}
-    throw new Error(errorMsg);
-  }
-
-  return await response.json();
+  return await callApi('/api/analyse', { url });
 }
 
 const CLASSIFICATIONS = {
@@ -330,7 +360,7 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
-  const [authStatus, setAuthStatus] = useState('locked');
+  const [authStatus, setAuthStatus] = useState(() => session.get() ? 'unlocked' : 'locked');
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -338,17 +368,35 @@ export default function App() {
   useEffect(() => { loadTools(); }, []);
   useEffect(() => { setCurrentPage(1); }, [searchQuery, filterClass, filterTag, filterAudience]);
 
-  function attemptUnlock(password) {
-    if (password === ADMIN_PASSWORD) {
+  // Re-check session every minute so we lock automatically when token expires
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (authStatus === 'unlocked' && !session.get()) {
+        setAuthStatus('locked');
+        if (view === 'evaluate') {
+          setView('dashboard');
+          setCurrentTool(null);
+          setEditingId(null);
+        }
+      }
+    }, 60 * 1000);
+    return () => clearInterval(interval);
+  }, [authStatus, view]);
+
+  async function attemptUnlock(password) {
+    try {
+      await loginWithPassword(password);
       setAuthStatus('unlocked');
       setShowAuthModal(false);
       if (pendingAction) { pendingAction(); setPendingAction(null); }
-      return true;
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e.message || 'Login failed' };
     }
-    return false;
   }
 
   function lock() {
+    session.clear();
     setAuthStatus('locked');
     if (view === 'evaluate') {
       setView('dashboard');
@@ -358,8 +406,12 @@ export default function App() {
   }
 
   function requireAuth(action) {
-    if (authStatus === 'unlocked') action();
-    else { setPendingAction(() => action); setShowAuthModal(true); }
+    if (authStatus === 'unlocked' && session.get()) action();
+    else {
+      if (authStatus === 'unlocked') setAuthStatus('locked'); // session expired
+      setPendingAction(() => action);
+      setShowAuthModal(true);
+    }
   }
 
   async function loadTools() {
@@ -391,7 +443,13 @@ export default function App() {
       setEditingId(null);
     } catch (e) {
       console.error('Save failed', e);
-      alert('Could not save evaluation. Please check your connection and try again.');
+      if (e.message && e.message.includes('session has expired')) {
+        setAuthStatus('locked');
+        setShowAuthModal(true);
+        alert('Your session expired. Please log in again, then try saving.');
+      } else {
+        alert('Could not save evaluation: ' + (e.message || 'Unknown error'));
+      }
     }
   }
 
@@ -409,7 +467,13 @@ export default function App() {
     } catch (e) {
       console.error('Delete failed', e);
       setDeleteTarget(null);
-      alert('Could not delete evaluation. Please try again.');
+      if (e.message && e.message.includes('session has expired')) {
+        setAuthStatus('locked');
+        setShowAuthModal(true);
+        alert('Your session expired. Please log in again, then try deleting.');
+      } else {
+        alert('Could not delete evaluation: ' + (e.message || 'Unknown error'));
+      }
     }
   }
 
@@ -593,12 +657,16 @@ function AuthModal({ onUnlock, onClose }) {
   const [error, setError] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function handleSubmit() {
+  async function handleSubmit() {
     setError(null);
     if (!password) { setError('Please enter the admin password.'); return; }
     setIsSubmitting(true);
-    const success = onUnlock(password);
-    if (!success) { setError('Incorrect password. Please try again.'); setIsSubmitting(false); setPassword(''); }
+    const result = await onUnlock(password);
+    if (!result.success) {
+      setError(result.error || 'Incorrect password. Please try again.');
+      setIsSubmitting(false);
+      setPassword('');
+    }
   }
 
   return (
