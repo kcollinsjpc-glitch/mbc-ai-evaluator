@@ -124,19 +124,19 @@ function getTagColor(tag) {
 }
 
 const SUITABILITY_OPTIONS = [
-  { value: 'staff-only', label: 'Staff only (18+)', short: 'Staff', icon: '🔒' },
-  { value: 'senior', label: 'Staff and Senior (Year 10 to 12)', short: 'Year 10 to 12', icon: '👥' },
-  { value: 'middle-senior', label: 'Staff and Middle to Senior (Year 7 to 12)', short: 'Year 7 to 12', icon: '👨‍🎓' },
-  { value: 'supervised', label: 'Staff and all students (supervised)', short: 'All (supervised)', icon: '👩‍🏫' },
+  { value: 'staff', label: 'Staff', short: 'Staff', icon: '🔒' },
+  { value: 'senior', label: 'Senior Secondary Students (Year 10 to 12)', short: 'Year 10 to 12', icon: '👥' },
+  { value: 'junior', label: 'Junior Secondary Students (Year 7 to 9)', short: 'Year 7 to 9', icon: '👨‍🎓' },
+  { value: 'primary', label: 'Primary Students (Year 5 to 6, supervised)', short: 'Primary (supervised)', icon: '👩‍🏫' },
   { value: 'all', label: 'All users, any context', short: 'All users', icon: '🌐' },
-  { value: 'not-recommended', label: 'Not recommended', short: 'Not recommended', icon: '⛔' }
+  { value: 'not-recommended', label: 'Not recommended for any users', short: 'Not recommended', icon: '⛔' }
 ];
 
 const SUITABILITY_COLORS = {
-  'staff-only': { bg: '#FEE2E2', text: '#991B1B' },
+  'staff': { bg: '#FEE2E2', text: '#991B1B' },
   'senior': { bg: '#FEF3C7', text: '#92400E' },
-  'middle-senior': { bg: '#FEF3C7', text: '#92400E' },
-  'supervised': { bg: '#D1FAE5', text: '#064E3B' },
+  'junior': { bg: '#FEF3C7', text: '#92400E' },
+  'primary': { bg: '#DBEAFE', text: '#1E3A8A' },
   'all': { bg: '#D1FAE5', text: '#064E3B' },
   'not-recommended': { bg: '#1F1F1F', text: '#FFFFFF' }
 };
@@ -236,7 +236,7 @@ const ETHICAL_CRITERIA = [
 
 const emptyTool = {
   name: '', url: '', purpose: '', tags: [],
-  suitability: 'staff-only', ageRestriction: '', notes: '',
+  suitability: [], ageRestriction: '', notes: '',
   aiReasoning: null, aiAnalysed: false,
   safety: {
     dataSovereignty: null, educationProvision: null, retraining: null,
@@ -250,6 +250,13 @@ const emptyTool = {
   effective: 0,
   reviewerOverride: 'none'
 };
+
+// Returns suitability as an array regardless of stored shape
+function getSuitability(tool) {
+  if (Array.isArray(tool.suitability)) return tool.suitability;
+  if (typeof tool.suitability === 'string' && tool.suitability) return [tool.suitability];
+  return [];
+}
 
 function getTags(tool) {
   if (Array.isArray(tool.tags) && tool.tags.length) return tool.tags;
@@ -514,7 +521,7 @@ export default function App() {
     const matchesSearch = !searchQuery || t.name?.toLowerCase().includes(searchQuery.toLowerCase()) || t.purpose?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesClass = filterClass === 'all' || getClassification(t) === filterClass;
     const matchesTag = filterTag === 'all' || getTags(t).includes(filterTag);
-    const matchesAudience = filterAudience === 'all' || t.suitability === filterAudience;
+    const matchesAudience = filterAudience === 'all' || getSuitability(t).includes(filterAudience);
     return matchesSearch && matchesClass && matchesTag && matchesAudience;
   });
 
@@ -949,6 +956,16 @@ function SuitabilityBadge({ value }) {
   );
 }
 
+function SuitabilityBadges({ values }) {
+  const arr = Array.isArray(values) ? values : (values ? [values] : []);
+  if (arr.length === 0) return <span className="text-xs text-gray-400">Not set</span>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {arr.map(v => <SuitabilityBadge key={v} value={v} />)}
+    </div>
+  );
+}
+
 function ToolRow({ tool, onView, onEdit, isUnlocked }) {
   const cls = formatClassification(tool);
   const tags = getTags(tool);
@@ -979,7 +996,7 @@ function ToolRow({ tool, onView, onEdit, isUnlocked }) {
         <div className="col-span-2">
           <p className="text-sm text-gray-700 line-clamp-3">{tool.purpose || <span className="text-gray-300">No description</span>}</p>
         </div>
-        <div className="col-span-2"><SuitabilityBadge value={tool.suitability} /></div>
+        <div className="col-span-2"><SuitabilityBadges values={getSuitability(tool)} /></div>
         <div className="col-span-2">
           <div className="flex flex-wrap gap-1">
             {tags.slice(0, 4).map(tag => <Tag key={tag} label={tag} />)}
@@ -1016,7 +1033,7 @@ function ToolRow({ tool, onView, onEdit, isUnlocked }) {
           </div>
           <div>
             <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Audience</div>
-            <SuitabilityBadge value={tool.suitability} />
+            <SuitabilityBadges values={getSuitability(tool)} />
           </div>
         </div>
 
@@ -1221,16 +1238,39 @@ function EvaluationForm({ tool, setTool, onSave, onCancel, isEditing }) {
             <input type="text" value={tool.ageRestriction} onChange={e => updateField('ageRestriction', e.target.value)} placeholder="e.g., 13+, 16+" className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:border-pink-400 text-sm" />
             <p className="text-xs text-gray-500 mt-1">Appears inside the classification bubble on the main list.</p>
           </Field>
-          <Field label="Suitable For">
+          <Field label="Suitable For (select all that apply)">
             <div className="grid grid-cols-1 gap-2">
-              {SUITABILITY_OPTIONS.map(opt => (
-                <label key={opt.value} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition ${tool.suitability === opt.value ? 'border-pink-400 bg-pink-50' : 'border-gray-200 hover:border-gray-300'}`}>
-                  <input type="radio" name="suitability" value={opt.value} checked={tool.suitability === opt.value} onChange={e => updateField('suitability', e.target.value)} className="sr-only" />
-                  <span className="text-lg">{opt.icon}</span>
-                  <span className="text-sm text-gray-700">{opt.label}</span>
-                </label>
-              ))}
+              {SUITABILITY_OPTIONS.map(opt => {
+                const selected = getSuitability(tool);
+                const isChecked = selected.includes(opt.value);
+                const isNotRecommended = opt.value === 'not-recommended';
+                const isAll = opt.value === 'all';
+
+                function toggle() {
+                  let next;
+                  // "Not recommended" and "All users" are mutually exclusive with everything else
+                  if (isNotRecommended) {
+                    next = isChecked ? [] : ['not-recommended'];
+                  } else if (isAll) {
+                    next = isChecked ? [] : ['all'];
+                  } else {
+                    next = isChecked
+                      ? selected.filter(v => v !== opt.value)
+                      : [...selected.filter(v => v !== 'not-recommended' && v !== 'all'), opt.value];
+                  }
+                  updateField('suitability', next);
+                }
+
+                return (
+                  <label key={opt.value} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition ${isChecked ? 'border-pink-400 bg-pink-50' : 'border-gray-200 hover:border-gray-300'}`}>
+                    <input type="checkbox" checked={isChecked} onChange={toggle} className="rounded text-pink-600" />
+                    <span className="text-lg">{opt.icon}</span>
+                    <span className="text-sm text-gray-700">{opt.label}</span>
+                  </label>
+                );
+              })}
             </div>
+            <p className="text-xs text-gray-500 mt-1.5">"All users" and "Not recommended" cannot be combined with other audiences.</p>
           </Field>
         </FormSection>
 
@@ -1402,7 +1442,10 @@ function ToolDetail({ tool, onBack, onEdit, onDelete, isUnlocked }) {
   const ethicalScore = calculateEthicalScore(tool.ethical);
   const effectiveScore = tool.effective || 0;
   const total = safetyScore + ethicalScore + effectiveScore;
-  const suit = SUITABILITY_OPTIONS.find(s => s.value === tool.suitability);
+  const suitabilityArr = getSuitability(tool);
+  const suitabilityLabels = suitabilityArr
+    .map(v => SUITABILITY_OPTIONS.find(s => s.value === v)?.label)
+    .filter(Boolean);
   const tags = getTags(tool);
 
   function findLabel(criteria, id, value) {
@@ -1459,10 +1502,10 @@ function ToolDetail({ tool, onBack, onEdit, onDelete, isUnlocked }) {
               ) : (<span className="text-xs text-gray-400">No tags</span>)}
             </OverviewField>
             <OverviewField label="Audience">
-              {suit ? (
-                <div className="space-y-1">
-                  <SuitabilityBadge value={tool.suitability} />
-                  <div className="text-xs text-gray-500">{suit.label}</div>
+              {suitabilityArr.length > 0 ? (
+                <div className="space-y-1.5">
+                  <SuitabilityBadges values={suitabilityArr} />
+                  <div className="text-xs text-gray-500">{suitabilityLabels.join(', ')}</div>
                 </div>
               ) : (<span className="text-xs text-gray-400">Not set</span>)}
             </OverviewField>
