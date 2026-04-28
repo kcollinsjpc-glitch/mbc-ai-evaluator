@@ -286,6 +286,11 @@ function getClassification(tool) {
   const ethical = calculateEthicalScore(tool.ethical);
   const total = safety + ethical + (tool.effective || 0);
 
+  // Direct override wins over everything (including hard-fail safeguard rules)
+  if (tool.reviewerOverride && CLASSIFICATIONS[tool.reviewerOverride]) {
+    return tool.reviewerOverride;
+  }
+
   if (tool.safety.safeguards === 0) return 'prohibited';
   if (tool.safety.safeguards === 1) return 'restricted';
 
@@ -294,6 +299,7 @@ function getClassification(tool) {
   else if (total <= 24) base = 'limited';
   else base = 'approved';
 
+  // Backwards compatibility: handle the old up/down override values
   const order = ['prohibited', 'restricted', 'limited', 'approved', 'preferred'];
   const idx = order.indexOf(base);
   if (tool.reviewerOverride === 'up' && idx < 4) return order[idx + 1];
@@ -1428,14 +1434,31 @@ function EvaluationForm({ tool, setTool, onSave, onCancel, isEditing }) {
             <textarea value={tool.notes} onChange={e => updateField('notes', e.target.value)} placeholder="Any specific cautions, use cases, or context for staff. You can use **bold** for emphasis." rows={4} className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:border-pink-400 text-sm resize-none" />
             <p className="text-xs text-gray-500 mt-1">Supports **bold** formatting and line breaks.</p>
           </Field>
-          <Field label="Reviewer Override (moves classification one level)">
-            <div className="grid grid-cols-3 gap-2">
-              {[{ v: 'down', l: 'Move down one level' }, { v: 'none', l: 'No override' }, { v: 'up', l: 'Move up one level' }].map(opt => (
-                <button key={opt.v} type="button" onClick={() => updateField('reviewerOverride', opt.v)} className={`px-3 py-2 rounded-lg border text-xs font-medium transition ${tool.reviewerOverride === opt.v ? 'border-pink-400 bg-pink-50 text-pink-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}>
-                  {opt.l}
+          <Field label="Reviewer Override (force a specific classification)">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => updateField('reviewerOverride', 'none')}
+                className={`px-3 py-2 rounded-lg border text-xs font-medium transition ${(!tool.reviewerOverride || tool.reviewerOverride === 'none' || tool.reviewerOverride === 'up' || tool.reviewerOverride === 'down') ? 'border-pink-400 bg-pink-50 text-pink-700' : 'border-gray-200 text-gray-600 hover:border-gray-300'}`}
+              >
+                Use calculated
+              </button>
+              {Object.entries(CLASSIFICATIONS).map(([key, c]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => updateField('reviewerOverride', key)}
+                  className="px-3 py-2 rounded-lg border text-xs font-semibold transition"
+                  style={tool.reviewerOverride === key
+                    ? { background: c.bg, color: c.text, borderColor: c.text + '60' }
+                    : { background: 'white', color: '#4B5563', borderColor: '#E5E7EB' }
+                  }
+                >
+                  {c.label}
                 </button>
               ))}
             </div>
+            <p className="text-xs text-gray-500 mt-1.5">Selecting a classification forces that status, bypassing the calculated score and the safeguard rules. Use "Use calculated" to revert to the score-based classification.</p>
           </Field>
         </FormSection>
       </div>
@@ -1681,7 +1704,11 @@ function ToolDetail({ tool, onBack, onEdit, onDelete, isUnlocked }) {
           {tool.reviewerOverride && tool.reviewerOverride !== 'none' && (
             <div className="pt-3 border-t border-gray-100">
               <div className="text-xs text-gray-600">Reviewer Override</div>
-              <div className="text-sm text-gray-900">Moved {tool.reviewerOverride} one level</div>
+              <div className="text-sm text-gray-900">
+                {CLASSIFICATIONS[tool.reviewerOverride]
+                  ? `Forced to ${CLASSIFICATIONS[tool.reviewerOverride].label}`
+                  : `Moved ${tool.reviewerOverride} one level`}
+              </div>
             </div>
           )}
         </div>
