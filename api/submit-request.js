@@ -41,6 +41,7 @@ async function sendNotificationEmail(request) {
 
   const safe = {
     name: escapeHtml(request.requesterName || 'Anonymous'),
+    email: escapeHtml(request.requesterEmail || ''),
     url: escapeHtml(request.toolUrl || ''),
     yearLevel: escapeHtml(request.yearLevel || 'Not specified'),
     intendedUse: escapeHtml(request.intendedUse || ''),
@@ -51,7 +52,7 @@ async function sendNotificationEmail(request) {
   const html = `
     <h2 style="color:#A6174A;font-family:system-ui,sans-serif;">New AI Tool Evaluation Request</h2>
     <table style="font-family:system-ui,sans-serif;border-collapse:collapse;">
-      <tr><td style="padding:6px 12px 6px 0;color:#666;"><strong>From:</strong></td><td>${safe.name}</td></tr>
+      <tr><td style="padding:6px 12px 6px 0;color:#666;"><strong>From:</strong></td><td>${safe.name}${safe.email ? ` &lt;<a href="mailto:${safe.email}">${safe.email}</a>&gt;` : ''}</td></tr>
       <tr><td style="padding:6px 12px 6px 0;color:#666;"><strong>Tool URL:</strong></td><td><a href="${safe.url}">${safe.url}</a></td></tr>
       <tr><td style="padding:6px 12px 6px 0;color:#666;"><strong>Year Level:</strong></td><td>${safe.yearLevel}</td></tr>
       <tr><td style="padding:6px 12px 6px 0;color:#666;"><strong>Urgency:</strong></td><td>${safe.urgency}</td></tr>
@@ -97,6 +98,7 @@ export default async function handler(req, res) {
   const body = req.body || {};
   const toolUrl = sanitiseString(body.toolUrl, 500);
   const requesterName = sanitiseString(body.requesterName, 100);
+  const requesterEmail = sanitiseString(body.requesterEmail, 200).toLowerCase();
   const yearLevel = sanitiseString(body.yearLevel, 50);
   const intendedUse = sanitiseString(body.intendedUse, 2000);
   const urgency = sanitiseString(body.urgency, 50);
@@ -104,11 +106,23 @@ export default async function handler(req, res) {
 
   if (!toolUrl) return res.status(400).json({ error: 'Tool URL is required' });
   if (!requesterName) return res.status(400).json({ error: 'Your name is required' });
+  if (!requesterEmail) return res.status(400).json({ error: 'Your MBC email address is required' });
+
+  // Email format check
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(requesterEmail)) {
+    return res.status(400).json({ error: 'Please enter a valid email address' });
+  }
+
+  // Domain restriction: only accept MBC staff emails
+  if (!requesterEmail.endsWith('@mbc.qld.edu.au')) {
+    return res.status(403).json({ error: 'Only MBC staff email addresses (@mbc.qld.edu.au) can submit requests.' });
+  }
+
   if (!intendedUse) return res.status(400).json({ error: 'Intended use is required' });
 
   const id = `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const createdAt = Date.now();
-  const requestData = { toolUrl, requesterName, yearLevel, intendedUse, urgency, notes, status: 'pending' };
+  const requestData = { toolUrl, requesterName, requesterEmail, yearLevel, intendedUse, urgency, notes, status: 'pending' };
 
   try {
     const supabase = getServerSupabase();
