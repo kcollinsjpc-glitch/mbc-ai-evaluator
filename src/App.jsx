@@ -1795,6 +1795,7 @@ function ToolDetail({ tool, onBack, onEdit, onDelete, isUnlocked }) {
 function RequestForm({ onCancel, onSubmitted }) {
   const [toolUrl, setToolUrl] = useState('');
   const [requesterName, setRequesterName] = useState('');
+  const [requesterEmail, setRequesterEmail] = useState('');
   const [yearLevel, setYearLevel] = useState('');
   const [intendedUse, setIntendedUse] = useState('');
   const [urgency, setUrgency] = useState('Standard');
@@ -1807,6 +1808,10 @@ function RequestForm({ onCancel, onSubmitted }) {
     setError(null);
     if (!toolUrl.trim()) { setError('Please enter the tool URL.'); return; }
     if (!requesterName.trim()) { setError('Please enter your name.'); return; }
+    const email = requesterEmail.trim().toLowerCase();
+    if (!email) { setError('Please enter your MBC email address.'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setError('Please enter a valid email address.'); return; }
+    if (!email.endsWith('@mbc.qld.edu.au')) { setError('Only MBC staff email addresses (@mbc.qld.edu.au) can submit requests.'); return; }
     if (!intendedUse.trim()) { setError('Please describe how you would use this tool.'); return; }
 
     setSubmitting(true);
@@ -1814,6 +1819,7 @@ function RequestForm({ onCancel, onSubmitted }) {
       await requests.submit({
         toolUrl: toolUrl.trim(),
         requesterName: requesterName.trim(),
+        requesterEmail: email,
         yearLevel: yearLevel.trim(),
         intendedUse: intendedUse.trim(),
         urgency,
@@ -1875,6 +1881,16 @@ function RequestForm({ onCancel, onSubmitted }) {
               placeholder="e.g., Jane Smith"
               className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:border-pink-400 text-sm"
             />
+          </Field>
+          <Field label="Your MBC Email" required>
+            <input
+              type="email"
+              value={requesterEmail}
+              onChange={e => setRequesterEmail(e.target.value)}
+              placeholder="firstname.lastname@mbc.qld.edu.au"
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:border-pink-400 text-sm"
+            />
+            <p className="text-xs text-gray-500 mt-1.5">Only MBC staff email addresses can submit requests.</p>
           </Field>
           <Field label="Year Level / Department">
             <input
@@ -2056,6 +2072,11 @@ function RequestsList({ onBack, onStartEvaluation }) {
                     <div>
                       <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-0.5">Requester</div>
                       <div className="text-sm text-gray-900">{r.requesterName || 'Anonymous'}</div>
+                      {r.requesterEmail && (
+                        <a href={`mailto:${r.requesterEmail}`} className="text-xs hover:underline" style={{ color: '#A6174A' }}>
+                          {r.requesterEmail}
+                        </a>
+                      )}
                     </div>
                     <div>
                       <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-0.5">Year Level / Dept</div>
